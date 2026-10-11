@@ -4,10 +4,6 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
-  workflow_run:
-    workflows: [build]
-    types: [completed]
-    branches: [main]
 
 env:
   BASE_PATH: /portfolio
@@ -17,10 +13,14 @@ permissions:
   pages: write
   id-token: write
 
+concurrency:
+  group: pages
+  url: ${{ steps.deployment.outputs.page_url }}
+
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
 
     steps:
       - uses: actions/checkout@v4
@@ -56,4 +56,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        action: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v4
