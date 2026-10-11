@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { getTranslation, Locale } from "@/lib/i18n";
 import { getProjects, Project } from "@/lib/projects";
 import { Navigation } from "@/components/Navigation";
@@ -12,18 +12,8 @@ import { LanguageToggle } from "@/components/LanguageToggle";
 
 export default function Home() {
   const [locale, setLocale] = useState<Locale>("en");
-  const [cursor, setCursor] = useState({ x: 0, y: 0 });
   const t = getTranslation(locale);
   const projects = getProjects();
-
-  // Parallax cursor tracking для 3D сцен
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      setCursor({ x: e.clientX, y: e.clientY });
-    };
-    window.addEventListener("mousemove", handleMouseMove);
-    return () => window.removeEventListener("mousemove", handleMouseMove);
-  }, []);
 
   // Reading progress bar
   const [scrollY, setScrollY] = useState(0);
@@ -48,9 +38,6 @@ export default function Home() {
         id="reading-progress"
         style={{ transform: `scaleX(${scrollY / 100})` }}
       />
-
-      {/* Three.js Canvas Background */}
-      <ThreeSceneBackground cursor={cursor} />
 
       {/* Navigation */}
       <Navigation t={t} />
@@ -268,34 +255,6 @@ export default function Home() {
       </section>
     </>
   );
-}
-
-// ===== Three.js Scene Component =====
-function ThreeSceneBackground({
-  cursor,
-}: {
-  cursor: { x: number; y: number };
-}) {
-  const canvasRef = useRef<HTMLDivElement>(null);
-  const cleanupRef = useRef<(() => void) | null>(null);
-
-  useEffect(() => {
-    if (!canvasRef.current) return;
-
-    // Dynamic import to avoid SSR issues with THREE.js
-    import("@/lib/three-init").then(({ initSpaceScene }) => {
-      cleanupRef.current = initSpaceScene(canvasRef.current!);
-    });
-
-    return () => {
-      if (cleanupRef.current) {
-        cleanupRef.current();
-        cleanupRef.current = null;
-      }
-    };
-  }, []);
-
-  return <div ref={canvasRef} className="fixed inset-0 -z-10" />;
 }
 
 // ===== Project Card =====
