@@ -31,9 +31,7 @@ const galaxyFragmentShader = `
 `;
 
 export function initSpaceScene(
-  container: HTMLElement,
-  cursor: { x: number; y: number },
-  locale: string
+  container: HTMLElement
 ) {
   const scene = new THREE.Scene();
 
@@ -219,17 +217,9 @@ export function initSpaceScene(
     // Звёздное поле мерцает
     starMaterial.size = 0.5 + Math.sin(time * 0.5) * 0.2;
 
-    // Параллакс камеры по курсору
-    camera.position.x = THREE.MathUtils.lerp(
-      camera.position.x,
-      (cursor.x / window.innerWidth - 0.5) * 3,
-      0.03
-    );
-    camera.position.y = THREE.MathUtils.lerp(
-      camera.position.y,
-      (0.5 - cursor.y / window.innerHeight) * 2,
-      0.03
-    );
+    // Плавное центрирование камеры
+    camera.position.x = THREE.MathUtils.lerp(camera.position.x, 0, 0.02);
+    camera.position.y = THREE.MathUtils.lerp(camera.position.y, 0, 0.02);
     camera.lookAt(scene.position);
 
     renderer.render(scene, camera);
@@ -253,7 +243,3 @@ export function initSpaceScene(
     container.removeChild(renderer.domElement);
   };
 }
-
-export const useThreeScene = () => {
-  return { initSpaceScene };
-};

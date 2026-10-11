@@ -50,7 +50,7 @@ export default function Home() {
       />
 
       {/* Three.js Canvas Background */}
-      <ThreeSceneBackground cursor={cursor} locale={locale} />
+      <ThreeSceneBackground cursor={cursor} />
 
       {/* Navigation */}
       <Navigation t={t} />
@@ -273,10 +273,8 @@ export default function Home() {
 // ===== Three.js Scene Component =====
 function ThreeSceneBackground({
   cursor,
-  locale,
 }: {
   cursor: { x: number; y: number };
-  locale: Locale;
 }) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
@@ -286,7 +284,7 @@ function ThreeSceneBackground({
 
     // Dynamic import to avoid SSR issues with THREE.js
     import("@/lib/three-init").then(({ initSpaceScene }) => {
-      cleanupRef.current = initSpaceScene(canvasRef.current!, cursor, locale);
+      cleanupRef.current = initSpaceScene(canvasRef.current!);
     });
 
     return () => {
@@ -296,16 +294,6 @@ function ThreeSceneBackground({
       }
     };
   }, []);
-
-  // Обновляем курсор в сцене
-  useEffect(() => {
-    if (!canvasRef.current) return;
-    const scene = (canvasRef.current as any).__spaceScene;
-    if (scene && scene.uniforms) {
-      scene.uniforms.cursor.value.x = cursor.x / window.innerWidth;
-      scene.uniforms.cursor.value.y = cursor.y / window.innerHeight;
-    }
-  }, [cursor]);
 
   return <div ref={canvasRef} className="fixed inset-0 -z-10" />;
 }
