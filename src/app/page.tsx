@@ -279,13 +279,22 @@ function ThreeSceneBackground({
   locale: Locale;
 }) {
   const canvasRef = useRef<HTMLDivElement>(null);
+  const cleanupRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (!canvasRef.current) return;
 
-    const { initSpaceScene } = require("@/lib/three-init");
-    const cleanup = initSpaceScene(canvasRef.current, cursor, locale);
-    return cleanup;
+    // Dynamic import to avoid SSR issues with THREE.js
+    import("@/lib/three-init").then(({ initSpaceScene }) => {
+      cleanupRef.current = initSpaceScene(canvasRef.current!, cursor, locale);
+    });
+
+    return () => {
+      if (cleanupRef.current) {
+        cleanupRef.current();
+        cleanupRef.current = null;
+      }
+    };
   }, []);
 
   // Обновляем курсор в сцене
