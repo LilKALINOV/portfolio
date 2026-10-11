@@ -1,157 +1,186 @@
 import * as THREE from "three";
-import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+
+// ===== Галактика: шейдерный фон с вращающейся спиралью =====
+const galaxyVertexShader = `
+  varying vec3 vPosition;
+  uniform float uTime;
+  uniform float uRotation;
+  void main() {
+    vPosition = position;
+    vec3 pos = position;
+    float angle = atan(pos.z, pos.x) + uTime * 0.05;
+    float radius = length(pos.xz);
+    pos.y += sin(angle * 6.0 + uTime * 2.0) * 0.01;
+    pos.x += cos(angle * 3.0 + uTime) * radius * 0.02;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+  }
+`;
+
+const galaxyFragmentShader = `
+  varying vec3 vPosition;
+  uniform vec3 uColor1;
+  uniform vec3 uColor2;
+  uniform vec3 uColor3;
+  void main() {
+    float d = length(vPosition);
+    float strength = 0.15 / (0.1 + abs(d - 0.8));
+    vec3 color = mix(uColor1, uColor2, vPosition.y * 0.5 + 0.5);
+    color = mix(color, uColor3, strength * 0.3);
+    gl_FragColor = vec4(color, strength * 0.3);
+  }
+`;
 
 export function initSpaceScene(
   container: HTMLElement,
   cursor: { x: number; y: number },
   locale: string
 ) {
-  // Scene
   const scene = new THREE.Scene();
 
-  // Starfield background (shaders)
-  const starGeometry = new THREE.BufferGeometry();
-  const starCount = 2000;
-  const starPositions = new Float32Array(starCount * 3);
+  // ===== Галактика =====
+  const galaxyGeometry = new THREE.TorusGeometry(1.5, 0.4, 300, 120);
 
-  for (let i = 0; i < starCount * 3; i++) {
-    starPositions[i] = (Math.random() - 0.5) * 100;
+  const galaxyMaterial = new THREE.ShaderMaterial({
+    vertexShader: galaxyVertexShader,
+    fragmentShader: galaxyFragmentShader,
+    uniforms: {
+      uTime: { value: 0 },
+      uRotation: { value: 0 },
+      uColor1: { value: new THREE.Color(0x00f0ff) },
+      uColor2: { value: new THREE.Color(0xff00ff) },
+      uColor3: { value: new THREE.Color(0x818cf8) },
+    },
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
+
+  const galaxy = new THREE.Points(galaxyGeometry, galaxyMaterial);
+  scene.add(galaxy);
+
+  // ===== Динамическое звёздное поле =====
+  const starGeometry = new THREE.BufferGeometry();
+  const starCount = 3000;
+  const starPositions = new Float32Array(starCount * 3);
+  const starSizes = new Float32Array(starCount);
+  const starPhases = new Float32Array(starCount);
+
+  const starColors = [0x00f0ff, 0xff00ff, 0xffffff, 0x818cf8];
+
+  for (let i = 0; i < starCount; i++) {
+    starPositions[i * 3] = (Math.random() - 0.5) * 80;
+    starPositions[i * 3 + 1] = (Math.random() - 0.5) * 45;
+    starPositions[i * 3 + 2] = (Math.random() - 0.5) * 80;
+    starSizes[i] = Math.random() * 3 + 0.5;
+    starPhases[i] = Math.random() * Math.PI * 2;
   }
 
   starGeometry.setAttribute("position", new THREE.BufferAttribute(starPositions, 3));
+  starGeometry.setAttribute("size", new THREE.BufferAttribute(starSizes, 1));
+  starGeometry.setAttribute("phase", new THREE.BufferAttribute(starPhases, 1));
+
   const starMaterial = new THREE.PointsMaterial({
-    color: 0x00f0ff,
-    size: 0.15,
+    size: 0.5,
     sizeAttenuation: true,
     transparent: true,
-    opacity: 0.6,
+    opacity: 0.8,
+    vertexColors: false,
   });
+
+  const color = new THREE.Color();
+  const starColorsTyped = new Float32Array(starCount * 3);
+  for (let i = 0; i < starCount; i++) {
+    const col = starColors[Math.floor(Math.random() * starColors.length)];
+    color.setHex(col);
+    starColorsTyped[i * 3] = color.r;
+    starColorsTyped[i * 3 + 1] = color.g;
+    starColorsTyped[i * 3 + 2] = color.b;
+  }
+  starGeometry.setAttribute("color", new THREE.BufferAttribute(starColorsTyped, 3));
 
   const starField = new THREE.Points(starGeometry, starMaterial);
   scene.add(starField);
 
-  // Floating geometric objects (rings, crystals, helix)
-  const ringGeometry = new THREE.TorusGeometry(2, 0.1, 16, 100);
-  const ringMaterial = new THREE.MeshPhysicalMaterial({
+  // ===== Планеты и спутники (динамические) =====
+  const planetGeometry = new THREE.IcosahedronGeometry(0.6, 1);
+  const planetMaterial = new THREE.MeshPhysicalMaterial({
     color: 0x00f0ff,
-    metalness: 0.8,
+    metalness: 0.3,
     roughness: 0.1,
-    transmission: 0.3,
-    ior: 1.5,
-    iridescence: 0.9,
-  });
-
-  const rings: THREE.Mesh[] = [];
-  for (let i = 0; i < 8; i++) {
-    const ring = new THREE.Mesh(ringGeometry, ringMaterial);
-    ring.position.set(
-      (Math.random() - 0.5) * 20,
-      (Math.random() - 0.5) * 10,
-      (Math.random() - 0.5) * 20
-    );
-    ring.rotation.x = Math.random() * Math.PI;
-    ring.rotation.y = Math.random() * Math.PI;
-    (ring as any).userData = {
-      rotX: (Math.random() - 0.5) * 0.002,
-      rotY: (Math.random() - 0.5) * 0.002,
-    };
-    scene.add(ring);
-    rings.push(ring);
-  }
-
-  // Crystal clusters
-  const crystalGeometry = new THREE.IcosahedronGeometry(0.4, 1);
-  const crystalMaterial = new THREE.MeshPhysicalMaterial({
-    color: 0xff00ff,
-    metalness: 0.9,
-    roughness: 0.05,
     transmission: 0.5,
-    ior: 2.0,
+    ior: 1.5,
     iridescence: 0.8,
-    emissive: 0xff00ff,
-    emissiveIntensity: 0.3,
-  });
-
-  const crystals: THREE.Mesh[] = [];
-  for (let i = 0; i < 15; i++) {
-    const crystal = new THREE.Mesh(crystalGeometry, crystalMaterial);
-    crystal.position.set(
-      (Math.random() - 0.5) * 30,
-      (Math.random() - 0.5) * 12,
-      (Math.random() - 0.5) * 30
-    );
-    (crystal as any).userData = {
-      phase: Math.random() * Math.PI * 2,
-    };
-    scene.add(crystal);
-    crystals.push(crystal);
-  }
-
-  // Helix coil (like dwertyfa's hero)
-  const helixGeometry = new THREE.CapsuleGeometry(0.05, 1.5, 4, 8);
-  const helixMaterial = new THREE.MeshStandardMaterial({
-    color: 0x00f0ff,
-    metalness: 0.7,
-    roughness: 0.1,
     emissive: 0x00f0ff,
-    emissiveIntensity: 0.5,
+    emissiveIntensity: 0.2,
   });
 
-  const helixPoints: THREE.Mesh[] = [];
-  const helixRadius = 3;
-  const helixTurns = 10;
-  for (let i = 0; i < helixTurns * 20; i++) {
-    const t = i / (helixTurns * 20);
-    const angle = t * Math.PI * 2 * helixTurns;
-    const y = t * 8 - 4;
-    const x = Math.cos(angle) * helixRadius;
-    const z = Math.sin(angle) * helixRadius;
-    const sphere = new THREE.Mesh(helixGeometry, helixMaterial);
-    sphere.position.set(x, y, z);
-    scene.add(sphere);
-    helixPoints.push(sphere);
+  const planets: THREE.Mesh[] = [];
+  const planetData: { speed: number; radius: number; height: number }[] = [];
+
+  for (let i = 0; i < 8; i++) {
+    const planet = new THREE.Mesh(planetGeometry, planetMaterial.clone());
+    planet.material.color.setHSL(i * 0.12, 0.8, 0.5 + i * 0.03);
+    planet.material.emissive.setHSL(i * 0.12, 0.8, 0.5 + i * 0.03);
+
+    const radius = 6 + i * 1.8;
+    const speed = 0.3 + i * 0.15;
+    const height = (Math.random() - 0.5) * 8;
+
+    planet.position.set(
+      Math.cos(i) * radius,
+      height,
+      Math.sin(i) * radius
+    );
+
+    planetData.push({ speed, radius, height });
+    scene.add(planet);
+    planets.push(planet);
   }
 
-  // Lighting
-  const ambientLight = new THREE.AmbientLight(0x404040, 1.5);
+  // ===== Тонкая сетка (grid) =====
+  const gridHelper = new THREE.GridHelper(60, 60, 0x00f0ff, 0x00f0ff);
+  gridHelper.material.opacity = 0.1;
+  gridHelper.material.transparent = true;
+  gridHelper.position.y = -15;
+  scene.add(gridHelper);
+
+  // ===== Освет =====
+  const ambientLight = new THREE.AmbientLight(0x404040, 1.2);
   scene.add(ambientLight);
 
-  const directionalLight = new THREE.DirectionalLight(0x00f0ff, 0.5);
-  directionalLight.position.set(1, 1, 1);
-  scene.add(directionalLight);
+  const mainLight = new THREE.DirectionalLight(0x00f0ff, 0.8);
+  mainLight.position.set(5, 10, 7);
+  scene.add(mainLight);
 
-  const pointLight = new THREE.PointLight(0xff00ff, 0.8, 50);
+  const pointLight = new THREE.PointLight(0xff00ff, 1.0, 30);
   scene.add(pointLight);
 
-  // Camera
+  // ===== Камера =====
   const camera = new THREE.PerspectiveCamera(
     60,
     window.innerWidth / window.innerHeight,
     0.1,
     1000
   );
-  camera.position.z = 8;
+  camera.position.z = 12;
 
-  // Renderer
+  // ===== Рендерер =====
   const renderer = new THREE.WebGLRenderer({
     antialias: true,
     alpha: true,
     powerPreference: "high-performance",
   });
   renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setClearColor(0x000000, 0);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.0;
+  renderer.toneMappingExposure = 0.8;
   container.appendChild(renderer.domElement);
 
-  // Store uniforms for external cursor updates
-  const uniforms = {
-    cursor: { value: new THREE.Vector2(0.5, 0.5) },
-  };
-  (container as any).__spaceScene = { uniforms };
+  // Store reference
+  (container as any).__spaceScene = { uniforms: galaxyMaterial.uniforms };
 
-  // Resize handler
+  // ===== Resize handler =====
   const handleResize = () => {
     const w = window.innerWidth;
     const h = window.innerHeight;
@@ -161,7 +190,7 @@ export function initSpaceScene(
   };
   window.addEventListener("resize", handleResize);
 
-  // Visibility handling
+  // ===== Анимация =====
   let time = 0;
   let animationId: number;
 
@@ -169,63 +198,56 @@ export function initSpaceScene(
     animationId = requestAnimationFrame(animate);
     time += 0.01;
 
-    // Rotate rings
-    rings.forEach((ring, i) => {
-      const ud = ring.userData as { rotX: number; rotY: number };
-      ring.rotation.x += ud.rotX + Math.sin(time * 0.3 + i) * 0.0005;
-      ring.rotation.y += ud.rotY + Math.cos(time * 0.2 + i) * 0.0005;
-      ring.scale.setScalar(1 + Math.sin(time + i) * 0.02);
+    // Галактика вращается
+    galaxyMaterial.uniforms.uTime.value = time;
+    galaxy.rotation.y = time * 0.03;
+    galaxy.rotation.x = Math.sin(time * 0.1) * 0.1;
+
+    // Планеты движутся по орбитам
+    planets.forEach((planet, i) => {
+      const data = planetData[i];
+      const angle = time * data.speed;
+      planet.position.set(
+        Math.cos(angle + i) * data.radius,
+        data.height + Math.sin(time * 0.3 + i) * 0.5,
+        Math.sin(angle + i) * data.radius
+      );
+      planet.rotation.y += 0.02;
+      planet.rotation.x += 0.01;
     });
 
-    // Pulse crystals
-    crystals.forEach((crystal, i) => {
-      const ud = crystal.userData as { phase: number };
-      crystal.scale.setScalar(0.8 + Math.sin(time + ud.phase) * 0.2);
-      (crystal.material as THREE.MeshPhysicalMaterial).emissiveIntensity = 0.2 + Math.sin(time + ud.phase) * 0.1;
-    });
+    // Звёздное поле мерцает
+    starMaterial.size = 0.5 + Math.sin(time * 0.5) * 0.2;
 
-    // Animate helix
-    helixPoints.forEach((point, i) => {
-      const s = Math.sin(time + i * 0.1);
-      point.scale.setScalar(0.8 + s * 0.2);
-      point.position.y += Math.sin(time * 2 + i) * 0.001;
-    });
-
-    // Subtle star rotation
-    starField.rotation.y = time * 0.005;
-
-    // Gentle camera drift based on cursor
+    // Параллакс камеры по курсору
     camera.position.x = THREE.MathUtils.lerp(
       camera.position.x,
-      (uniforms.cursor.value.x - 0.5) * 2,
-      0.02
+      (cursor.x / window.innerWidth - 0.5) * 3,
+      0.03
     );
     camera.position.y = THREE.MathUtils.lerp(
       camera.position.y,
-      -(uniforms.cursor.value.y - 0.5) * 2,
-      0.02
+      (0.5 - cursor.y / window.innerHeight) * 2,
+      0.03
     );
-
     camera.lookAt(scene.position);
+
     renderer.render(scene, camera);
   };
 
-  // Only animate when tab is visible
-  const handleVisibility = () => {
+  document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
       cancelAnimationFrame(animationId);
     } else {
       animate();
     }
-  };
+  });
 
-  document.addEventListener("visibilitychange", handleVisibility);
   animate();
 
-  // Return cleanup
+  // Cleanup
   return () => {
     window.removeEventListener("resize", handleResize);
-    document.removeEventListener("visibilitychange", handleVisibility);
     cancelAnimationFrame(animationId);
     renderer.dispose();
     container.removeChild(renderer.domElement);
